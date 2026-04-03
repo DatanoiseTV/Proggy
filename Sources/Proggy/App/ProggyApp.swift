@@ -158,6 +158,29 @@ struct ProggyApp: App {
                 .disabled(!manager.isBusy)
             }
 
+            // API menu
+            CommandMenu("API") {
+                Toggle("Enable REST API", isOn: Binding(
+                    get: { manager.apiServer.isRunning },
+                    set: { on in
+                        if on {
+                            manager.apiServer.manager = manager
+                            try? manager.apiServer.start()
+                            manager.log(.info, "API server started on port \(manager.apiServer.port)")
+                        } else {
+                            manager.apiServer.stop()
+                            manager.log(.info, "API server stopped")
+                        }
+                    }
+                ))
+
+                if manager.apiServer.isRunning {
+                    Divider()
+                    Text("http://localhost:\(manager.apiServer.port)/api/")
+                        .font(.system(.caption, design: .monospaced))
+                }
+            }
+
             // Help menu
             CommandGroup(replacing: .help) {
                 Button("Keyboard Shortcuts") {

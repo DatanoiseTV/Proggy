@@ -32,6 +32,18 @@ struct DeviceStatusBar: View {
 
             Spacer()
 
+            // API indicator
+            if manager.apiServer.isRunning {
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 6, height: 6)
+                    Text("API :\(manager.apiServer.port)")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             // Progress / Status
             if manager.isBusy {
                 HStack(spacing: 8) {

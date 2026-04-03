@@ -6,6 +6,7 @@ import SwiftUI
 final class DeviceManager {
     let device = CH341Device()
     let buffer = HexDataBuffer()
+    let apiServer = APIServer()
 
     // Connection state
     var isConnected = false
