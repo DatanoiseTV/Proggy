@@ -6,10 +6,12 @@ A native macOS tool for programming flash, EEPROM, FRAM, SigmaDSP, ESP32, and RP
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-<img width="1100" height="865" alt="Screenshot 2026-04-03 at 14 27 18" src="https://github.com/user-attachments/assets/8442d7fd-071a-49ff-a0f2-34b278cecaac" />
-<img width="2200" height="1730" alt="image" src="https://github.com/user-attachments/assets/9b231cd5-6d30-41ba-a242-c6b1cc834e61" />
-<img width="1100" height="806" alt="Screenshot 2026-04-03 at 13 01 53" src="https://github.com/user-attachments/assets/1c3bd186-4efb-415a-b1d6-d1af43e609bf" />
-<img width="1100" height="806" alt="Screenshot 2026-04-03 at 13 02 09" src="https://github.com/user-attachments/assets/6eb7a91d-4d61-48dd-bc1b-5a0761041165" />
+<img width="1100" height="865" alt="Screenshot 2026-04-03 at 14 46 17" src="https://github.com/user-attachments/assets/5a5f1e47-dad2-4e5b-a88e-808ad9bc115d" />
+<img width="1100" height="865" alt="Screenshot 2026-04-03 at 14 46 30" src="https://github.com/user-attachments/assets/007ffe8d-91d2-404d-a4b3-2a6a5a7ee604" />
+<img width="1100" height="865" alt="Screenshot 2026-04-03 at 14 46 40" src="https://github.com/user-attachments/assets/c9e34d19-2347-4f8e-99f2-de320fd3332f" />
+<img width="1100" height="865" alt="Screenshot 2026-04-03 at 14 46 48" src="https://github.com/user-attachments/assets/16bd0b76-2328-4cb9-91fa-f34418ffb1c8" />
+<img width="1100" height="865" alt="Screenshot 2026-04-03 at 14 47 01" src="https://github.com/user-attachments/assets/97f68cf1-b581-4990-a2d0-9fcf30f4d3a8" />
+
 
 ## What it does
 
