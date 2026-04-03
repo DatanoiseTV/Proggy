@@ -12,6 +12,14 @@ struct LogView: View {
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button("Copy All") {
+                    let text = manager.logEntries.map { "\($0.timestampString) \($0.level.rawValue) \($0.message)" }.joined(separator: "\n")
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+                .controlSize(.mini)
+                .disabled(manager.logEntries.isEmpty)
+
                 Button("Clear") {
                     manager.logEntries.removeAll()
                 }

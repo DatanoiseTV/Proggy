@@ -9,6 +9,9 @@ final class CH341Device {
     private(set) var isConnected = false
     private(set) var deviceRevision: String = ""
 
+    /// Debug log closure for SPI troubleshooting
+    var spiDebugLog: ((String) -> Void)?
+
     // MARK: - Connection
 
     func open() throws {
@@ -27,7 +30,7 @@ final class CH341Device {
         }
         self.handle = dev
 
-        // Detach kernel driver if active
+        // Detach kernel driver if active (Linux only, no-op on macOS)
         if libusb_kernel_driver_active(dev, 0) == 1 {
             libusb_detach_kernel_driver(dev, 0)
         }
@@ -41,10 +44,13 @@ final class CH341Device {
             throw CH341Error.claimFailed
         }
 
-        // Read device descriptor for revision
-        var desc = libusb_device_descriptor()
-        if libusb_get_device_descriptor(libusb_get_device(dev), &desc) == 0 {
-            deviceRevision = String(format: "%d.%02d", desc.bcdDevice >> 8, desc.bcdDevice & 0xFF)
+        // Read device descriptor via USB control transfer (matches ch341prog)
+        // This is NOT the same as libusb_get_device_descriptor — it sends an actual
+        // USB request to the device which may be needed to initialize the CH341A.
+        var desc = [UInt8](repeating: 0, count: 0x12)
+        let descRC = libusb_get_descriptor(dev, 1 /* LIBUSB_DT_DEVICE */, 0x00, &desc, 0x12)
+        if descRC >= 0 {
+            deviceRevision = String(format: "%d.%02d", desc[12], desc[13])
         }
 
         isConnected = true
@@ -69,6 +75,7 @@ final class CH341Device {
 
     func bulkWrite(_ data: [UInt8]) throws -> Int {
         guard let handle else { throw CH341Error.notConnected }
+        // Send exact byte count — no padding (CH341A processes all bytes sent)
         var buf = data
         var transferred: Int32 = 0
         let rc = libusb_bulk_transfer(handle, CH341.bulkWriteEndpoint, &buf, Int32(buf.count), &transferred, CH341.usbTimeout)
@@ -78,9 +85,11 @@ final class CH341Device {
 
     func bulkRead(_ length: Int) throws -> [UInt8] {
         guard let handle else { throw CH341Error.notConnected }
-        var buf = [UInt8](repeating: 0, count: length)
+        // CH341A always returns full 32-byte packets — allocate at least one packet
+        let bufSize = max(length, CH341.packetLength)
+        var buf = [UInt8](repeating: 0, count: bufSize)
         var transferred: Int32 = 0
-        let rc = libusb_bulk_transfer(handle, CH341.bulkReadEndpoint, &buf, Int32(length), &transferred, CH341.usbTimeout)
+        let rc = libusb_bulk_transfer(handle, CH341.bulkReadEndpoint, &buf, Int32(bufSize), &transferred, CH341.usbTimeout)
         guard rc == 0 else { throw CH341Error.transferFailed(rc) }
         return Array(buf[0..<Int(transferred)])
     }
@@ -96,6 +105,18 @@ final class CH341Device {
                     continuation.resume(throwing: error)
                 }
             }
+        }
+    }
+
+    /// Drain any leftover bytes from the read endpoint
+    func flushRead() {
+        guard let handle else { return }
+        var buf = [UInt8](repeating: 0, count: CH341.maxTransferSize)
+        var transferred: Int32 = 0
+        // Non-blocking drain — read with short timeout until empty
+        for _ in 0..<4 {
+            let rc = libusb_bulk_transfer(handle, CH341.bulkReadEndpoint, &buf, Int32(buf.count), &transferred, 10)
+            if rc != 0 || transferred == 0 { break }
         }
     }
 

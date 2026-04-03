@@ -60,6 +60,7 @@ enum CH341 {
     static let spiWriteEnable: UInt8 = 0x06
     static let spiWriteDisable: UInt8 = 0x04
     static let spiChipErase: UInt8 = 0xC7
+    static let spiChipEraseAlt: UInt8 = 0x60  // Some chips (AMIC, older) use 0x60
     static let spiSectorErase: UInt8 = 0x20
     static let spiBlock32Erase: UInt8 = 0x52
     static let spiBlock64Erase: UInt8 = 0xD8

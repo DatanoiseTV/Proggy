@@ -24,7 +24,7 @@ final class DeviceManager {
     var logEntries: [LogEntry] = []
 
     // Speed setting
-    var speed: CH341Speed = .i2c100k
+    var speed: CH341Speed = .i2c20k  // Default to slowest (most compatible, same as ch341prog)
 
     // Chip selection
     var selectedChip: ChipEntry?
@@ -88,6 +88,7 @@ final class DeviceManager {
         do {
             try device.open()
             try device.setStream(speed: speed)
+            device.spiDebugLog = { msg in self.log(.info, msg) }
             isConnected = true
             deviceInfo = "CH341A (rev \(device.deviceRevision))"
             log(.info, "Device connected: \(deviceInfo)")
@@ -106,6 +107,8 @@ final class DeviceManager {
         runOperation("Connecting") {
             try self.device.open()
             try self.device.setStream(speed: self.speed)
+            // Enable SPI debug logging
+            self.device.spiDebugLog = { msg in self.log(.info, msg) }
             await MainActor.run {
                 self.isConnected = true
                 self.deviceInfo = "CH341A (rev \(self.device.deviceRevision))"
@@ -134,24 +137,42 @@ final class DeviceManager {
     func detectChip() async {
         guard isConnected else { return }
         runOperation("Detecting chip") {
-            let jedec = try await self.device.perform { dev in
-                try dev.readJEDECID()
+            // Run SPI diagnostic
+            try? await self.device.perform { dev in
+                try dev.spiDiagnostic(debugLog: { msg in self.log(.info, msg) })
             }
-            await MainActor.run {
-                self.chipInfo = jedec
-                self.chipCapacity = jedec.capacityBytes
 
-                if let known = ChipDatabase.lookup(jedec: jedec) {
-                    self.chipName = known.name
-                    self.chipCapacity = known.capacity
-                } else {
-                    self.chipName = nil
+            // Try JEDEC first (most common), then REMS, then RDID
+            self.log(.info, "Trying JEDEC ID (0x9F)...")
+            if let jedec = try? await self.device.perform({ dev in
+                try dev.readJEDECID(debugLog: { msg in self.log(.info, msg) })
+            }) {
+                await MainActor.run {
+                    self.chipInfo = jedec
+                    self.chipCapacity = jedec.capacityBytes
+                    if let known = ChipDatabase.lookup(jedec: jedec) {
+                        self.chipName = known.name
+                        self.chipCapacity = known.capacity
+                    }
                 }
+                self.log(.info, "Chip detected: \(jedec.description)")
+                return
             }
-            self.log(.info, "Chip detected: \(jedec.description)")
-            if let name = self.chipName {
-                self.log(.info, "Identified as: \(name)")
+
+            // JEDEC failed — try full auto-detect (REMS 0x90, RDID 0xAB)
+            self.log(.info, "JEDEC not supported, trying REMS/RDID...")
+            if let detected = try? await self.device.perform({ dev in
+                try dev.spiAutoDetect()
+            }) {
+                await MainActor.run {
+                    self.chipName = detected.name
+                    self.chipCapacity = detected.capacity
+                }
+                self.log(.info, "\(detected.type.rawValue): \(detected.manufacturer) \(detected.name ?? "Unknown") (\(self.formatSize(detected.capacity))) [ID: \(detected.rawID)]")
+                return
             }
+
+            self.log(.warning, "No SPI chip detected via JEDEC/REMS/RDID — try selecting manually")
         }
     }
 
@@ -174,7 +195,7 @@ final class DeviceManager {
                 if spiDev.type == .spiFlash {
                     // Also set JEDEC info
                     let jedec = try? await self.device.perform { dev in
-                        try dev.readJEDECID()
+                        try dev.readJEDECID(debugLog: { msg in self.log(.info, msg) })
                     }
                     await MainActor.run {
                         self.chipInfo = jedec
@@ -275,7 +296,12 @@ final class DeviceManager {
     }
 
     func writeChip() {
-        guard isConnected, !buffer.isEmpty else { return }
+        guard isConnected, !buffer.isEmpty, chipCapacity > 0 else {
+            if chipCapacity == 0 {
+                log(.warning, "No chip selected — detect or select a chip first")
+            }
+            return
+        }
         let data = buffer.data
 
         if isI2CMode {
@@ -310,9 +336,13 @@ final class DeviceManager {
                 self.log(.info, "Erasing...")
                 await MainActor.run { self.statusMessage = "Erasing..." }
                 try await self.device.perform { dev in
-                    try dev.chipErase(cancelled: { self.cancelFlag })
+                    try dev.chipErase(
+                        progress: { pct in Task { @MainActor in self.progress = pct } },
+                        debugLog: { msg in self.log(.info, msg) },
+                        cancelled: { self.cancelFlag })
                 }
                 self.log(.info, "Erase complete")
+                await MainActor.run { self.progress = 0 }
 
                 await MainActor.run { self.statusMessage = "Writing..." }
                 try await self.device.perform { dev in
@@ -337,7 +367,10 @@ final class DeviceManager {
     }
 
     func eraseChip() {
-        guard isConnected else { return }
+        guard isConnected, chipCapacity > 0 else {
+            if chipCapacity == 0 { log(.warning, "No chip selected") }
+            return
+        }
         if isI2CMode {
             // I2C EEPROMs don't have an erase command — fill with 0xFF
             let cap = chipCapacity
@@ -355,7 +388,9 @@ final class DeviceManager {
             runOperation("Erasing SPI chip") {
                 try await self.device.perform { dev in
                     try dev.writeStatus(0x00)
-                    try dev.chipErase(cancelled: { self.cancelFlag })
+                    try dev.chipErase(
+                        progress: { pct in Task { @MainActor in self.progress = pct } },
+                        cancelled: { self.cancelFlag })
                 }
                 self.log(.info, "SPI erase complete")
             }
@@ -363,7 +398,10 @@ final class DeviceManager {
     }
 
     func verifyChip() {
-        guard isConnected, !buffer.isEmpty else { return }
+        guard isConnected, !buffer.isEmpty, chipCapacity > 0 else {
+            if chipCapacity == 0 { log(.warning, "No chip selected") }
+            return
+        }
         let data = buffer.data
 
         if isI2CMode {

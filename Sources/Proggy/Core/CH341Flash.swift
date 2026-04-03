@@ -5,21 +5,124 @@ import Foundation
 extension CH341Device {
 
     /// Read the JEDEC ID from the SPI flash chip.
-    func readJEDECID() throws -> JEDECInfo {
-        var cmd = [UInt8](repeating: 0, count: 4)
-        cmd[0] = CH341.spiReadJEDEC
+    /// Retries with speed fallback if first attempt fails.
+    /// Returns debug info via the debugLog closure for troubleshooting.
+    /// Low-level SPI diagnostic using both old spiStream and new spiCommand.
+    func spiDiagnostic(debugLog: ((String) -> Void)? = nil) throws {
+        debugLog?("=== SPI DIAGNOSTIC ===")
 
-        let response = try spiStream(cmd, length: 4)
+        // Test 1: JEDEC via new spiCommand (send 1 byte cmd, read 3 bytes)
+        debugLog?("Test 1: JEDEC via spiCommand(write:[9F], read:3)")
+        do {
+            let t0 = Date()
+            let resp = try spiCommand(write: [0x9F], readCount: 3)
+            let ms = Date().timeIntervalSince(t0) * 1000
+            let hex = resp.map { String(format: "%02X", $0) }.joined(separator: " ")
+            debugLog?("  Response: [\(hex)] (\(String(format: "%.1f", ms))ms)")
+        } catch { debugLog?("  Error: \(error)") }
 
-        guard response.count >= 4 else { throw CH341Error.chipNotDetected }
+        // Test 2: Status register via spiCommand
+        debugLog?("Test 2: Status via spiCommand(write:[05], read:1)")
+        do {
+            let resp = try spiCommand(write: [0x05], readCount: 1)
+            let hex = resp.map { String(format: "%02X", $0) }.joined(separator: " ")
+            debugLog?("  Response: [\(hex)]")
+        } catch { debugLog?("  Error: \(error)") }
 
-        let mfr = response[1]
-        let memType = (UInt16(response[2]) << 8) | UInt16(response[3])
-        let capBits = response[3]
+        // Test 3: Flash read via spiCommand (4 write + 8 read)
+        debugLog?("Test 3: Read @0x0000 via spiCommand(write:[03,00,00,00], read:8)")
+        do {
+            let resp = try spiCommand(write: [0x03, 0x00, 0x00, 0x00], readCount: 8)
+            let hex = resp.map { String(format: "%02X", $0) }.joined(separator: " ")
+            debugLog?("  Data: [\(hex)]")
+        } catch { debugLog?("  Error: \(error)") }
 
-        guard mfr != 0xFF && mfr != 0x00 else { throw CH341Error.chipNotDetected }
+        // Test 4: JEDEC via legacy spiStream for comparison
+        debugLog?("Test 4: JEDEC via legacy spiStream([9F,00,00,00], len:4)")
+        do {
+            let resp = try spiStream([0x9F, 0, 0, 0], length: 4)
+            let hex = resp.map { String(format: "%02X", $0) }.joined(separator: " ")
+            debugLog?("  Response: [\(hex)]")
+        } catch { debugLog?("  Error: \(error)") }
 
-        return JEDECInfo(manufacturerID: mfr, memoryType: memType, capacityBits: capBits)
+        // Test 5: REMS (0x90) via spiCommand
+        debugLog?("Test 5: REMS via spiCommand(write:[90,00,00,00], read:2)")
+        do {
+            let resp = try spiCommand(write: [0x90, 0x00, 0x00, 0x00], readCount: 2)
+            let hex = resp.map { String(format: "%02X", $0) }.joined(separator: " ")
+            debugLog?("  Response: [\(hex)]")
+        } catch { debugLog?("  Error: \(error)") }
+
+        // Test 6: RDID (0xAB) via spiCommand
+        debugLog?("Test 6: RDID via spiCommand(write:[AB,00,00,00], read:1)")
+        do {
+            let resp = try spiCommand(write: [0xAB, 0x00, 0x00, 0x00], readCount: 1)
+            let hex = resp.map { String(format: "%02X", $0) }.joined(separator: " ")
+            debugLog?("  Response: [\(hex)]")
+        } catch { debugLog?("  Error: \(error)") }
+
+        // Test 7: EXACT readFlash replica — 260-byte spiStream (4 cmd + 256 dummy)
+        debugLog?("Test 7: Flash read EXACT replica (260B spiStream like readFlash)")
+        do {
+            var cmd = [UInt8](repeating: 0, count: 260)
+            cmd[0] = 0x03  // Read Data
+            // addr = 0x000000 (already zeros)
+            let resp = try spiStream(cmd, length: 260)
+            let firstData = resp.count > 4 ? resp[4..<min(12, resp.count)].map { String(format: "%02X", $0) }.joined(separator: " ") : "N/A"
+            let allFF = resp.dropFirst(4).prefix(8).allSatisfy { $0 == 0xFF }
+            debugLog?("  Response: \(resp.count)B, data@4: [\(firstData)] allFF=\(allFF)")
+        } catch { debugLog?("  Error: \(error)") }
+
+        debugLog?("=== END DIAGNOSTIC ===")
+    }
+
+    func readJEDECID(debugLog: ((String) -> Void)? = nil) throws -> JEDECInfo {
+        // Warmup: toggle CS a few times to sync the SPI bus
+        for _ in 0..<3 {
+            try? spiChipSelect(true)
+            usleep(1000)
+            try? spiChipSelect(false)
+            usleep(1000)
+        }
+        flushRead()
+
+        for attempt in 0..<3 {
+            flushRead()
+            if attempt > 0 {
+                Thread.sleep(forTimeInterval: 0.1)
+                try? setStream(speed: .i2c20k)
+            }
+
+            var cmd = [UInt8](repeating: 0, count: 4)
+            cmd[0] = CH341.spiReadJEDEC  // 0x9F
+
+            do {
+                let response = try spiStream(cmd, length: 4)
+                let hex = response.map { String(format: "%02X", $0) }.joined(separator: " ")
+                debugLog?("JEDEC attempt \(attempt): sent 9F 00 00 00, got [\(hex)] (\(response.count) bytes)")
+
+                guard response.count >= 4 else {
+                    debugLog?("  Too few bytes")
+                    continue
+                }
+
+                let mfr = response[1]
+                let memType = (UInt16(response[2]) << 8) | UInt16(response[3])
+                let capBits = response[3]
+
+                if mfr == 0xFF || mfr == 0x00 {
+                    debugLog?("  Invalid manufacturer: 0x\(String(format: "%02X", mfr))")
+                    continue
+                }
+
+                debugLog?("  Manufacturer: 0x\(String(format: "%02X", mfr)), Type: 0x\(String(format: "%04X", memType))")
+                return JEDECInfo(manufacturerID: mfr, memoryType: memType, capacityBits: capBits)
+            } catch {
+                debugLog?("  SPI error: \(error.localizedDescription)")
+                if attempt == 2 { throw error }
+            }
+        }
+        throw CH341Error.chipNotDetected
     }
 
     /// Read the flash status register.
@@ -47,19 +150,70 @@ extension CH341Device {
         try writeDisable()
     }
 
-    /// Erase the entire chip. Blocks until erase completes or timeout.
-    func chipErase(timeout: TimeInterval = 120, cancelled: (() -> Bool)? = nil) throws {
-        try writeEnable()
-        _ = try spiStream([CH341.spiChipErase], length: 1)
-        try writeDisable()
+    /// Erase the entire chip. Tries both 0xC7 and 0x60 erase commands.
+    func chipErase(timeout: TimeInterval = 120,
+                   progress: ((Double) -> Void)? = nil,
+                   debugLog: ((String) -> Void)? = nil,
+                   cancelled: (() -> Bool)? = nil) throws {
+        flushRead()
 
-        // Poll status register until WIP clears
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
+        // Read status register before erase
+        let preStatus = try? readStatus()
+        debugLog?("Pre-erase status: 0x\(String(format: "%02X", preStatus ?? 0xFF))")
+
+        // Unprotect: clear block protection bits
+        _ = try spiStream([CH341.spiWriteEnable], length: 1)
+        _ = try spiStream([CH341.spiWriteStatus, 0x00], length: 2)
+        Thread.sleep(forTimeInterval: 0.05)
+
+        // Check WEL bit after WREN
+        _ = try spiStream([CH341.spiWriteEnable], length: 1)
+        let welStatus = try? readStatus()
+        debugLog?("After WREN status: 0x\(String(format: "%02X", welStatus ?? 0xFF)) (WEL=\((welStatus ?? 0) & 0x02 != 0 ? "SET" : "NOT SET"))")
+
+        // Send chip erase — try 0xC7 first, then 0x60 if that doesn't start
+        _ = try spiStream([CH341.spiChipErase], length: 1)
+        Thread.sleep(forTimeInterval: 0.1)
+
+        // Check if erase started (WIP should be set)
+        let wipCheck = try? readStatus()
+        debugLog?("After 0xC7 status: 0x\(String(format: "%02X", wipCheck ?? 0xFF)) (WIP=\((wipCheck ?? 0) & 0x01 != 0 ? "SET" : "NOT SET"))")
+
+        if wipCheck == nil || wipCheck == 0xFF || (wipCheck! & 0x01 == 0) {
+            // 0xC7 didn't start erase — try alternate command 0x60
+            debugLog?("0xC7 didn't start erase, trying 0x60...")
+            _ = try spiStream([CH341.spiWriteEnable], length: 1)
+            _ = try spiStream([CH341.spiChipEraseAlt], length: 1)
+            Thread.sleep(forTimeInterval: 0.1)
+            let wipCheck2 = try? readStatus()
+            debugLog?("After 0x60 status: 0x\(String(format: "%02X", wipCheck2 ?? 0xFF))")
+        }
+
+        // Poll status register
+        let startTime = Date()
+        for tick in 0..<Int(timeout) {
             if cancelled?() == true { throw CH341Error.cancelled }
-            Thread.sleep(forTimeInterval: 0.5)
-            let status = try readStatus()
-            if status & CH341.statusWIP == 0 {
+            Thread.sleep(forTimeInterval: 1.0)
+
+            let elapsed = Double(tick + 1)
+            progress?(min(elapsed / 90.0, 0.95))
+
+            let status: Int
+            do {
+                let cmd: [UInt8] = [CH341.spiReadStatus, 0x00]
+                let resp = try spiStream(cmd, length: 2)
+                status = resp.count >= 2 ? Int(resp[1]) : -1
+                if tick < 3 || tick % 10 == 0 {
+                    debugLog?("Erase poll \(tick+1)s: status=0x\(String(format: "%02X", status))")
+                }
+            } catch {
+                debugLog?("Erase poll \(tick+1)s: read error")
+                continue
+            }
+
+            if status == 0 {
+                progress?(1.0)
+                debugLog?("Erase complete after \(tick+1)s")
                 return
             }
         }
@@ -95,6 +249,7 @@ extension CH341Device {
     func readFlash(address: UInt32, length: Int,
                    progress: ((Double) -> Void)? = nil,
                    cancelled: (() -> Bool)? = nil) throws -> Data {
+        flushRead()
         let use4B = (address + UInt32(length)) > 0xFFFFFF
         let chunkSize = 256  // Read 256 bytes at a time for reliability
 
@@ -143,6 +298,7 @@ extension CH341Device {
     func writeFlash(address: UInt32, data: Data,
                     progress: ((Double) -> Void)? = nil,
                     cancelled: (() -> Bool)? = nil) throws {
+        flushRead()
         let use4B = (address + UInt32(data.count)) > 0xFFFFFF
         let pageSize = CH341.spiPageSize
 
