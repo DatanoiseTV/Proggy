@@ -230,7 +230,13 @@ final class DeviceManager {
     // MARK: - Chip Type
 
     var isI2CMode: Bool {
-        selectedChip?.category == .i2cEEPROM
+        guard let cat = selectedChip?.category else { return false }
+        return cat == .i2cEEPROM || cat == .i2cFRAM
+    }
+
+    var isFRAMMode: Bool {
+        guard let cat = selectedChip?.category else { return false }
+        return cat == .spiFRAM || cat == .i2cFRAM
     }
 
     var i2cDeviceAddress: UInt8 {

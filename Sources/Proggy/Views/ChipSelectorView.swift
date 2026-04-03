@@ -106,14 +106,20 @@ struct ChipSelectorView: View {
 
 enum ChipCategory: String, CaseIterable, Identifiable {
     case spiFlash = "SPI Flash"
+    case spiEEPROM = "SPI EEPROM"
+    case spiFRAM = "SPI FRAM"
     case i2cEEPROM = "I2C EEPROM"
+    case i2cFRAM = "I2C FRAM"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
         case .spiFlash: return "bolt.horizontal"
+        case .spiEEPROM: return "memorychip"
+        case .spiFRAM: return "memorychip.fill"
         case .i2cEEPROM: return "point.3.connected.trianglepath.dotted"
+        case .i2cFRAM: return "point.3.filled.connected.trianglepath.dotted"
         }
     }
 }
@@ -850,28 +856,28 @@ enum ChipLibrary {
 
     // MARK: - SPI EEPROM (Microchip 25AA/25LC series)
     static let spiEEPROMChips: [ChipEntry] = [
-        ChipEntry(name: "25AA010A", manufacturer: "Microchip", capacity: 128, category: .spiFlash),
-        ChipEntry(name: "25LC010A", manufacturer: "Microchip", capacity: 128, category: .spiFlash),
-        ChipEntry(name: "25AA020A", manufacturer: "Microchip", capacity: 256, category: .spiFlash),
-        ChipEntry(name: "25LC020A", manufacturer: "Microchip", capacity: 256, category: .spiFlash),
-        ChipEntry(name: "25AA040A", manufacturer: "Microchip", capacity: 512, category: .spiFlash),
-        ChipEntry(name: "25LC040A", manufacturer: "Microchip", capacity: 512, category: .spiFlash),
-        ChipEntry(name: "25AA080B", manufacturer: "Microchip", capacity: 1024, category: .spiFlash),
-        ChipEntry(name: "25LC080B", manufacturer: "Microchip", capacity: 1024, category: .spiFlash),
-        ChipEntry(name: "25AA160B", manufacturer: "Microchip", capacity: 2048, category: .spiFlash),
-        ChipEntry(name: "25LC160B", manufacturer: "Microchip", capacity: 2048, category: .spiFlash),
-        ChipEntry(name: "25AA320A", manufacturer: "Microchip", capacity: 4096, category: .spiFlash),
-        ChipEntry(name: "25LC320A", manufacturer: "Microchip", capacity: 4096, category: .spiFlash),
-        ChipEntry(name: "25AA640A", manufacturer: "Microchip", capacity: 8192, category: .spiFlash),
-        ChipEntry(name: "25LC640A", manufacturer: "Microchip", capacity: 8192, category: .spiFlash),
-        ChipEntry(name: "25AA128", manufacturer: "Microchip", capacity: 16384, category: .spiFlash),
-        ChipEntry(name: "25LC128", manufacturer: "Microchip", capacity: 16384, category: .spiFlash),
-        ChipEntry(name: "25AA256", manufacturer: "Microchip", capacity: 32768, category: .spiFlash),
-        ChipEntry(name: "25LC256", manufacturer: "Microchip", capacity: 32768, category: .spiFlash),
-        ChipEntry(name: "25AA512", manufacturer: "Microchip", capacity: 65536, category: .spiFlash),
-        ChipEntry(name: "25LC512", manufacturer: "Microchip", capacity: 65536, category: .spiFlash),
-        ChipEntry(name: "25AA1024", manufacturer: "Microchip", capacity: 131072, category: .spiFlash),
-        ChipEntry(name: "25LC1024", manufacturer: "Microchip", capacity: 131072, category: .spiFlash),
+        ChipEntry(name: "25AA010A", manufacturer: "Microchip", capacity: 128, category: .spiEEPROM),
+        ChipEntry(name: "25LC010A", manufacturer: "Microchip", capacity: 128, category: .spiEEPROM),
+        ChipEntry(name: "25AA020A", manufacturer: "Microchip", capacity: 256, category: .spiEEPROM),
+        ChipEntry(name: "25LC020A", manufacturer: "Microchip", capacity: 256, category: .spiEEPROM),
+        ChipEntry(name: "25AA040A", manufacturer: "Microchip", capacity: 512, category: .spiEEPROM),
+        ChipEntry(name: "25LC040A", manufacturer: "Microchip", capacity: 512, category: .spiEEPROM),
+        ChipEntry(name: "25AA080B", manufacturer: "Microchip", capacity: 1024, category: .spiEEPROM),
+        ChipEntry(name: "25LC080B", manufacturer: "Microchip", capacity: 1024, category: .spiEEPROM),
+        ChipEntry(name: "25AA160B", manufacturer: "Microchip", capacity: 2048, category: .spiEEPROM),
+        ChipEntry(name: "25LC160B", manufacturer: "Microchip", capacity: 2048, category: .spiEEPROM),
+        ChipEntry(name: "25AA320A", manufacturer: "Microchip", capacity: 4096, category: .spiEEPROM),
+        ChipEntry(name: "25LC320A", manufacturer: "Microchip", capacity: 4096, category: .spiEEPROM),
+        ChipEntry(name: "25AA640A", manufacturer: "Microchip", capacity: 8192, category: .spiEEPROM),
+        ChipEntry(name: "25LC640A", manufacturer: "Microchip", capacity: 8192, category: .spiEEPROM),
+        ChipEntry(name: "25AA128", manufacturer: "Microchip", capacity: 16384, category: .spiEEPROM),
+        ChipEntry(name: "25LC128", manufacturer: "Microchip", capacity: 16384, category: .spiEEPROM),
+        ChipEntry(name: "25AA256", manufacturer: "Microchip", capacity: 32768, category: .spiEEPROM),
+        ChipEntry(name: "25LC256", manufacturer: "Microchip", capacity: 32768, category: .spiEEPROM),
+        ChipEntry(name: "25AA512", manufacturer: "Microchip", capacity: 65536, category: .spiEEPROM),
+        ChipEntry(name: "25LC512", manufacturer: "Microchip", capacity: 65536, category: .spiEEPROM),
+        ChipEntry(name: "25AA1024", manufacturer: "Microchip", capacity: 131072, category: .spiEEPROM),
+        ChipEntry(name: "25LC1024", manufacturer: "Microchip", capacity: 131072, category: .spiEEPROM),
     ]
 
     // MARK: - I2C EEPROM
@@ -913,41 +919,37 @@ enum ChipLibrary {
 
     // MARK: - SPI FRAM (Cypress/Infineon FM25xxx, Fujitsu MB85RS series)
     static let spiFramChips: [ChipEntry] = [
-        // Cypress / Infineon FM25 series
-        ChipEntry(name: "FM25V01A", manufacturer: "Cypress", capacity: 16384, category: .spiFlash),
-        ChipEntry(name: "FM25V02A", manufacturer: "Cypress", capacity: 32768, category: .spiFlash),
-        ChipEntry(name: "FM25V05", manufacturer: "Cypress", capacity: 65536, category: .spiFlash),
-        ChipEntry(name: "FM25V10", manufacturer: "Cypress", capacity: 131072, category: .spiFlash),
-        ChipEntry(name: "FM25V20A", manufacturer: "Cypress", capacity: 262144, category: .spiFlash),
-        ChipEntry(name: "FM25V40", manufacturer: "Cypress", capacity: 524288, category: .spiFlash),
-        ChipEntry(name: "FM25W256", manufacturer: "Cypress", capacity: 32768, category: .spiFlash),
-        ChipEntry(name: "FM25CL64B", manufacturer: "Cypress", capacity: 8192, category: .spiFlash),
-        // Fujitsu MB85RS series
-        ChipEntry(name: "MB85RS16N", manufacturer: "Fujitsu", capacity: 2048, category: .spiFlash),
-        ChipEntry(name: "MB85RS64V", manufacturer: "Fujitsu", capacity: 8192, category: .spiFlash),
-        ChipEntry(name: "MB85RS128B", manufacturer: "Fujitsu", capacity: 16384, category: .spiFlash),
-        ChipEntry(name: "MB85RS256B", manufacturer: "Fujitsu", capacity: 32768, category: .spiFlash),
-        ChipEntry(name: "MB85RS512T", manufacturer: "Fujitsu", capacity: 65536, category: .spiFlash),
-        ChipEntry(name: "MB85RS1MT", manufacturer: "Fujitsu", capacity: 131072, category: .spiFlash),
-        ChipEntry(name: "MB85RS2MT", manufacturer: "Fujitsu", capacity: 262144, category: .spiFlash),
-        ChipEntry(name: "MB85RS4MT", manufacturer: "Fujitsu", capacity: 524288, category: .spiFlash),
+        ChipEntry(name: "FM25V01A", manufacturer: "Cypress", capacity: 16384, category: .spiFRAM),
+        ChipEntry(name: "FM25V02A", manufacturer: "Cypress", capacity: 32768, category: .spiFRAM),
+        ChipEntry(name: "FM25V05", manufacturer: "Cypress", capacity: 65536, category: .spiFRAM),
+        ChipEntry(name: "FM25V10", manufacturer: "Cypress", capacity: 131072, category: .spiFRAM),
+        ChipEntry(name: "FM25V20A", manufacturer: "Cypress", capacity: 262144, category: .spiFRAM),
+        ChipEntry(name: "FM25V40", manufacturer: "Cypress", capacity: 524288, category: .spiFRAM),
+        ChipEntry(name: "FM25W256", manufacturer: "Cypress", capacity: 32768, category: .spiFRAM),
+        ChipEntry(name: "FM25CL64B", manufacturer: "Cypress", capacity: 8192, category: .spiFRAM),
+        ChipEntry(name: "MB85RS16N", manufacturer: "Fujitsu", capacity: 2048, category: .spiFRAM),
+        ChipEntry(name: "MB85RS64V", manufacturer: "Fujitsu", capacity: 8192, category: .spiFRAM),
+        ChipEntry(name: "MB85RS128B", manufacturer: "Fujitsu", capacity: 16384, category: .spiFRAM),
+        ChipEntry(name: "MB85RS256B", manufacturer: "Fujitsu", capacity: 32768, category: .spiFRAM),
+        ChipEntry(name: "MB85RS512T", manufacturer: "Fujitsu", capacity: 65536, category: .spiFRAM),
+        ChipEntry(name: "MB85RS1MT", manufacturer: "Fujitsu", capacity: 131072, category: .spiFRAM),
+        ChipEntry(name: "MB85RS2MT", manufacturer: "Fujitsu", capacity: 262144, category: .spiFRAM),
+        ChipEntry(name: "MB85RS4MT", manufacturer: "Fujitsu", capacity: 524288, category: .spiFRAM),
     ]
 
     // MARK: - I2C FRAM (Cypress FM24xxx, Fujitsu MB85RC series)
     static let i2cFramChips: [ChipEntry] = [
-        // Cypress / Infineon FM24 series
-        ChipEntry(name: "FM24C16B", manufacturer: "Cypress", capacity: 2048, category: .i2cEEPROM, pageSize: 32, sectorSize: 2048, i2cAddress: 0x50),
-        ChipEntry(name: "FM24CL64B", manufacturer: "Cypress", capacity: 8192, category: .i2cEEPROM, pageSize: 32, sectorSize: 8192, i2cAddress: 0x50),
-        ChipEntry(name: "FM24V01A", manufacturer: "Cypress", capacity: 16384, category: .i2cEEPROM, pageSize: 64, sectorSize: 16384, i2cAddress: 0x50),
-        ChipEntry(name: "FM24V02A", manufacturer: "Cypress", capacity: 32768, category: .i2cEEPROM, pageSize: 64, sectorSize: 32768, i2cAddress: 0x50),
-        ChipEntry(name: "FM24V05", manufacturer: "Cypress", capacity: 65536, category: .i2cEEPROM, pageSize: 128, sectorSize: 65536, i2cAddress: 0x50),
-        ChipEntry(name: "FM24V10", manufacturer: "Cypress", capacity: 131072, category: .i2cEEPROM, pageSize: 256, sectorSize: 131072, i2cAddress: 0x50),
-        // Fujitsu MB85RC series
-        ChipEntry(name: "MB85RC16V", manufacturer: "Fujitsu", capacity: 2048, category: .i2cEEPROM, pageSize: 32, sectorSize: 2048, i2cAddress: 0x50),
-        ChipEntry(name: "MB85RC64TA", manufacturer: "Fujitsu", capacity: 8192, category: .i2cEEPROM, pageSize: 32, sectorSize: 8192, i2cAddress: 0x50),
-        ChipEntry(name: "MB85RC128A", manufacturer: "Fujitsu", capacity: 16384, category: .i2cEEPROM, pageSize: 64, sectorSize: 16384, i2cAddress: 0x50),
-        ChipEntry(name: "MB85RC256V", manufacturer: "Fujitsu", capacity: 32768, category: .i2cEEPROM, pageSize: 64, sectorSize: 32768, i2cAddress: 0x50),
-        ChipEntry(name: "MB85RC512T", manufacturer: "Fujitsu", capacity: 65536, category: .i2cEEPROM, pageSize: 128, sectorSize: 65536, i2cAddress: 0x50),
-        ChipEntry(name: "MB85RC1MT", manufacturer: "Fujitsu", capacity: 131072, category: .i2cEEPROM, pageSize: 256, sectorSize: 131072, i2cAddress: 0x50),
+        ChipEntry(name: "FM24C16B", manufacturer: "Cypress", capacity: 2048, category: .i2cFRAM, pageSize: 32, sectorSize: 2048, i2cAddress: 0x50),
+        ChipEntry(name: "FM24CL64B", manufacturer: "Cypress", capacity: 8192, category: .i2cFRAM, pageSize: 32, sectorSize: 8192, i2cAddress: 0x50),
+        ChipEntry(name: "FM24V01A", manufacturer: "Cypress", capacity: 16384, category: .i2cFRAM, pageSize: 64, sectorSize: 16384, i2cAddress: 0x50),
+        ChipEntry(name: "FM24V02A", manufacturer: "Cypress", capacity: 32768, category: .i2cFRAM, pageSize: 64, sectorSize: 32768, i2cAddress: 0x50),
+        ChipEntry(name: "FM24V05", manufacturer: "Cypress", capacity: 65536, category: .i2cFRAM, pageSize: 128, sectorSize: 65536, i2cAddress: 0x50),
+        ChipEntry(name: "FM24V10", manufacturer: "Cypress", capacity: 131072, category: .i2cFRAM, pageSize: 256, sectorSize: 131072, i2cAddress: 0x50),
+        ChipEntry(name: "MB85RC16V", manufacturer: "Fujitsu", capacity: 2048, category: .i2cFRAM, pageSize: 32, sectorSize: 2048, i2cAddress: 0x50),
+        ChipEntry(name: "MB85RC64TA", manufacturer: "Fujitsu", capacity: 8192, category: .i2cFRAM, pageSize: 32, sectorSize: 8192, i2cAddress: 0x50),
+        ChipEntry(name: "MB85RC128A", manufacturer: "Fujitsu", capacity: 16384, category: .i2cFRAM, pageSize: 64, sectorSize: 16384, i2cAddress: 0x50),
+        ChipEntry(name: "MB85RC256V", manufacturer: "Fujitsu", capacity: 32768, category: .i2cFRAM, pageSize: 64, sectorSize: 32768, i2cAddress: 0x50),
+        ChipEntry(name: "MB85RC512T", manufacturer: "Fujitsu", capacity: 65536, category: .i2cFRAM, pageSize: 128, sectorSize: 65536, i2cAddress: 0x50),
+        ChipEntry(name: "MB85RC1MT", manufacturer: "Fujitsu", capacity: 131072, category: .i2cFRAM, pageSize: 256, sectorSize: 131072, i2cAddress: 0x50),
     ]
 }

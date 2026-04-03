@@ -1,6 +1,6 @@
 # Proggy
 
-A native macOS application for programming flash, EEPROM, and SigmaDSP devices via the **CH341A** USB programmer.
+A native macOS tool for programming flash, EEPROM, FRAM, SigmaDSP, and ESP32 devices. Built for embedded engineers who need a fast, no-nonsense programmer that just works.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
@@ -10,71 +10,91 @@ A native macOS application for programming flash, EEPROM, and SigmaDSP devices v
 <img width="1100" height="806" alt="Screenshot 2026-04-03 at 13 01 53" src="https://github.com/user-attachments/assets/1c3bd186-4efb-415a-b1d6-d1af43e609bf" />
 <img width="1100" height="806" alt="Screenshot 2026-04-03 at 13 02 09" src="https://github.com/user-attachments/assets/6eb7a91d-4d61-48dd-bc1b-5a0761041165" />
 
+## What it does
+
+- **Flash / EEPROM / FRAM** programming via CH341A (SPI + I2C)
+- **ESP32 flashing** via any USB-UART adapter (serial port)
+- **ADAU14xx SigmaDSP** firmware upload, safeload, and diagnostics via SPI
+- **SPI & I2C terminals** for raw bus communication
+- **550+ supported devices** with auto-detection
+
+## Supported Hardware
+
+| Programmer | Interface | Use |
+|-----------|-----------|-----|
+| CH341A mini programmer | USB (libusb) | SPI flash, I2C EEPROM/FRAM, SPI FRAM, SigmaDSP |
+| Any USB-UART adapter | Serial port | ESP32 family flashing |
+
 ## Features
 
-### Flash / EEPROM Programming
-- **SPI Flash** — Read, write, erase, verify, blank check for 25xx series (Winbond, GigaDevice, Macronix, ISSI, Micron, Spansion, SST, Atmel, XTX, Puya, Boya)
-- **I2C EEPROM** — Full page-aware read/write for 24Cxx series (1-byte and 2-byte addressing, ACK polling, proper write cycle timing)
-- **Auto-detection** — JEDEC ID (0x9F), REMS (0x90), RDID (0xAB) for SPI; bus scan + capacity probing for I2C
-- **70+ chips** in the built-in part selector, searchable by manufacturer
-- **Verify after write** with optional toggle
-- **Hex editor** — NSTableView-backed for smooth scrolling even with multi-MB files; byte editing with undo/redo
-- **Checksums** — CRC32, MD5, SHA256
+### Flash / EEPROM / FRAM Programming (CH341A)
+- **SPI Flash** (489 chips) — Read, write, erase, verify, blank check
+- **SPI EEPROM** (22 chips) — Microchip 25AA/25LC series
+- **SPI FRAM** (16 chips) — Cypress FM25, Fujitsu MB85RS (no erase, instant writes)
+- **I2C EEPROM** (32 chips) — 24Cxx series with page-aware writes and ACK polling
+- **I2C FRAM** (12 chips) — Cypress FM24, Fujitsu MB85RC (no write delay)
+- Auto-detection: JEDEC ID, REMS, RDID for SPI; bus scan + capacity probing for I2C
+- Part selector with 550+ devices, searchable, with recently used chips
+- Hex editor (NSTableView-backed, smooth at multi-MB), byte editing, undo/redo
+- Checksums: CRC32, MD5, SHA256
+- Verify after write, blank check, buffer size validation
+
+### ESP32 Flasher (Serial Port)
+- Supports **ESP32, ESP32-S2/S3, ESP32-C2/C3/C5/C6/C61, ESP32-H2, ESP32-P4**
+- SLIP-framed ROM bootloader protocol
+- Auto chip detection via magic register
+- Configurable flash offset and baud rate (115.2k to 2M)
+- DTR/RTS reset-to-bootloader sequence
+- Built-in serial monitor (send/receive)
+
+### SigmaDSP (ADAU14xx) via SPI
+- Firmware upload from SigmaStudio `.dat` or `.bin` with full init sequence
+- **Safeload** — 28-byte atomic burst write, 1-5 params, float/dB/hex input
+- **Biquad EQ** — 5 coefficient write/read with stability check and ADAU negation convention
+- Register read/write (16-bit control + 32-bit param RAM with fixed-point display)
+- Level meter readback with dB bars
+- Live diagnostics: core status, PLL lock, execute count, panic decoder, ASRC lock
+- GPIO (MP pin) control, aux ADC read
 
 ### SPI Terminal
-- Raw hex SPI transfers with response display
-- Manual chip select control (keep CS low between transfers)
-- Transaction history with timestamps
+- Raw hex transfers with chip select control
+- Transaction history
 
 ### I2C Terminal
-- Read/write to any 7-bit address
-- Register read (write-then-read) pattern
-- **Bus scanner** — visual grid showing all responding devices (0x03–0x77)
-- Speed selection: 20 kHz / 100 kHz / 400 kHz / 750 kHz
+- Read/write to any address, register access pattern
+- Bus scanner (0x03-0x77 visual grid)
+- 20 / 100 / 400 / 750 kHz speed selection
 
-### SigmaDSP (ADAU14xx)
-- **SPI-based firmware upload** to ADAU1401/1701/1452/1462/1466
-- Parses SigmaStudio `.dat` exports (TxBuffer + NumBytes) or pre-compiled `.bin`
-- Full init sequence: SPI mode entry, soft reset, PLL config, lock wait, firmware upload, core start
-- **Safeload** — glitch-free parameter updates with float/dB/hex input
-- **Register read/write** — 16-bit control registers and 32-bit parameter RAM with fixed-point display
-- **Live diagnostics** — core status, PLL lock, execute count, panic flag decoder, ASRC lock status
-- Configurable pre-PLL record skip with built-in explanation
+### File Formats
+- Binary `.bin`, Intel HEX `.hex`/`.ihex`, SigmaStudio `.dat`
+- Open from URL (`Cmd+U`)
+- Auto-reload on file change (paused during operations)
+- Drag & drop onto window
 
-### File Format Support
-- **Binary** (`.bin`) — raw read/write
-- **Intel HEX** (`.hex`, `.ihex`) — full import/export with extended address records
-- **SigmaStudio** (`.dat`) — TxBuffer/NumBytes conversion with chip-size padding for EEPROM images
-- **URL download** — fetch firmware directly from a web URL
-- **Auto-reload** — watches loaded file for changes, reloads automatically (paused during flash operations)
-- **Drag & drop** — drop files onto the window
-
-### Hardware
-- **CH341A hotplug** — automatic detection when the programmer is plugged in or removed
-- **ZIF-16 socket diagram** — visual pinout showing I2C (top 8 pins) and SPI (bottom 8 pins) placement
-- Buffer size validation with utilization bar
-
-## Requirements
-
-- macOS 14 (Sonoma) or later
-- [libusb](https://libusb.info/) — `brew install libusb`
-- A CH341A USB programmer
-
-## Building
+## Quick Start
 
 ```bash
-# Install libusb
+# 1. Install libusb
 brew install libusb
 
-# Build and run as .app bundle
+# 2. Clone and build
+git clone https://github.com/DatanoiseTV/Proggy.git
+cd Proggy
 make run
-
-# Or build release
-make bundle
-open .build/Proggy.app
 ```
 
-To open in Xcode:
+That's it. The app opens with your CH341A auto-detected.
+
+### Build Variants
+
+```bash
+make run           # Debug build, launch .app
+make run-release   # Release build, launch .app
+make bundle        # Release .app bundle in .build/
+```
+
+### Open in Xcode
+
 ```bash
 open Package.swift
 ```
@@ -88,28 +108,44 @@ open Package.swift
 | Open from URL | `Cmd+U` |
 | Save as Binary | `Cmd+S` |
 | Save as Intel HEX | `Cmd+Shift+S` |
-| Undo | `Cmd+Z` |
-| Redo | `Cmd+Shift+Z` |
-| Connect | `Cmd+K` |
-| Disconnect | `Cmd+Shift+K` |
+| Undo / Redo | `Cmd+Z` / `Cmd+Shift+Z` |
+| Connect / Disconnect | `Cmd+K` / `Cmd+Shift+K` |
 | Auto-Detect | `Cmd+D` |
-| Read Chip | `Cmd+Shift+R` |
-| Write Chip | `Cmd+Shift+W` |
-| Verify Chip | `Cmd+Shift+V` |
-| Cancel Operation | `Cmd+.` |
+| Read / Write / Verify | `Cmd+Shift+R` / `W` / `V` |
+| Cancel | `Cmd+.` |
 
-## Architecture
+## Project Structure
 
 ```
 Sources/
-  CLibUSB/              # libusb system library bridge
+  CLibUSB/                  # libusb C bridge (system library)
   Proggy/
-    App/                 # App entry point, icon generator
-    Core/                # CH341A protocol: USB, SPI, I2C, Flash, DSP
-    Models/              # Chip database, hex buffer, file formats
-    ViewModels/          # Device manager, SPI/I2C/DSP view models
-    Views/               # SwiftUI views, hex editor, ZIF socket graphic
+    App/                    # SwiftUI app, menus, icon
+    Core/
+      CH341Device.swift     # USB layer (libusb)
+      CH341SPI.swift        # SPI protocol (bit-reversal, CS control)
+      CH341I2C.swift        # I2C protocol (start/stop/read/write/scan)
+      CH341Flash.swift      # SPI flash operations (JEDEC, page program)
+      CH341I2CEEPROM.swift  # I2C EEPROM page-aware R/W
+      CH341FRAM.swift       # SPI + I2C FRAM (no erase, no delay)
+      CH341AutoDetect.swift # Multi-method chip detection
+      CH341DSP.swift        # ADAU14xx SigmaDSP over SPI
+      ESPProtocol.swift     # ESP32 SLIP bootloader protocol
+      SerialPort.swift      # macOS serial port (IOKit + termios)
+    Models/
+      ChipDatabase.swift    # JEDEC ID lookup
+      FileFormats.swift     # Intel HEX + SigmaStudio parsers
+      HexDataBuffer.swift   # Buffer with undo/redo + checksums
+    ViewModels/             # @Observable state for each tab
+    Views/                  # SwiftUI (hex editor, ZIF graphic, etc.)
 ```
+
+## Requirements
+
+- macOS 14 (Sonoma) or later
+- `brew install libusb`
+- CH341A programmer (for flash/EEPROM/FRAM/DSP)
+- Any USB-UART adapter (for ESP32 flashing)
 
 ## License
 
