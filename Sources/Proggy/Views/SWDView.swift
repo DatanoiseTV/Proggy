@@ -167,6 +167,33 @@ struct SWDView: View {
     @ViewBuilder
     private var flashSection: some View {
         VStack(spacing: 8) {
+            Toggle(isOn: $vm.autoProgramOnChange) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(vm.autoProgramOnChange ? .green : .secondary)
+                    Text("Auto-flash on file change")
+                        .font(.caption)
+                }
+            }
+            .toggleStyle(.checkbox)
+            .disabled(vm.watchedFirmwareURL == nil)
+
+            if vm.autoProgramOnChange {
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.fill")
+                        .foregroundStyle(.green)
+                        .font(.caption2)
+                    Text("Watching & auto-flashing")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                    if vm.autoProgramCount > 0 {
+                        Text("(\(vm.autoProgramCount)x)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Button {
                 vm.flash(manager: manager)
             } label: {

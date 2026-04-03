@@ -58,6 +58,13 @@ final class ESPViewModel {
         }
     }
 
+    // Auto-program
+    var autoProgramOnChange: Bool = false
+    var autoProgramCount: Int = 0
+    var watchedFirmwareURL: URL?
+    private var fwWatchSource: DispatchSourceFileSystemObject?
+    private var lastFwModDate: Date?
+
     // MARK: - Firmware Loading
 
     func loadFirmware(_ url: URL, manager: DeviceManager) {
@@ -65,9 +72,51 @@ final class ESPViewModel {
             firmwareData = try Data(contentsOf: url)
             firmwareFileName = url.lastPathComponent
             manager.log(.info, "ESP firmware loaded: \(manager.formatSize(firmwareData!.count)) from \(url.lastPathComponent)")
+            watchFirmware(url, manager: manager)
         } catch {
             manager.log(.error, "Failed to load firmware: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Firmware File Watching
+
+    func watchFirmware(_ url: URL, manager: DeviceManager) {
+        stopWatchingFirmware()
+        watchedFirmwareURL = url
+        lastFwModDate = manager.fileModDate(url)
+
+        let fd = Darwin.open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .rename], queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            guard let self, !self.isFlashing else { return }
+            let newDate = manager.fileModDate(url)
+            guard newDate != self.lastFwModDate else { return }
+            self.lastFwModDate = newDate
+
+            // Reload
+            guard let data = try? Data(contentsOf: url), !data.isEmpty else { return }
+            self.firmwareData = data
+            manager.log(.info, "ESP firmware reloaded: \(manager.formatSize(data.count))")
+
+            if self.autoProgramOnChange && !self.selectedPort.isEmpty {
+                self.autoProgramCount += 1
+                manager.log(.info, "ESP auto-program #\(self.autoProgramCount) triggered")
+                self.flash(manager: manager)
+            }
+        }
+        source.setCancelHandler { Darwin.close(fd) }
+        source.resume()
+        fwWatchSource = source
+    }
+
+    func stopWatchingFirmware() {
+        fwWatchSource?.cancel()
+        fwWatchSource = nil
+        watchedFirmwareURL = nil
     }
 
     // MARK: - Flash

@@ -202,6 +202,34 @@ struct ESPView: View {
                     .toggleStyle(.checkbox)
                 Toggle("Reset after flash", isOn: $vm.resetAfterFlash)
                     .toggleStyle(.checkbox)
+
+                Divider()
+
+                Toggle(isOn: $vm.autoProgramOnChange) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(vm.autoProgramOnChange ? .green : .secondary)
+                        Text("Auto-flash on file change")
+                    }
+                }
+                .toggleStyle(.checkbox)
+                .disabled(vm.watchedFirmwareURL == nil)
+
+                if vm.autoProgramOnChange {
+                    HStack(spacing: 4) {
+                        Image(systemName: "eye.fill")
+                            .foregroundStyle(.green)
+                            .font(.caption2)
+                        Text("Watching & auto-flashing")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                        if vm.autoProgramCount > 0 {
+                            Text("(\(vm.autoProgramCount)x)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             .font(.caption)
             .padding(.vertical, 2)

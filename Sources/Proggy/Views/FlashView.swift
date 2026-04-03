@@ -85,6 +85,39 @@ struct FlashView: View {
                     ))
                     .toggleStyle(.checkbox)
                     .font(.caption)
+
+                    Divider()
+
+                    Toggle(isOn: Binding(
+                        get: { manager.autoProgramOnChange },
+                        set: { manager.autoProgramOnChange = $0 }
+                    )) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(manager.autoProgramOnChange ? .green : .secondary)
+                            Text("Auto-program on file change")
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
+                    .disabled(manager.watchedFileURL == nil)
+                    .help("Automatically write to chip when the loaded file changes on disk")
+
+                    if manager.autoProgramOnChange {
+                        HStack(spacing: 4) {
+                            Image(systemName: "eye.fill")
+                                .foregroundStyle(.green)
+                                .font(.caption2)
+                            Text("Watching & auto-programming")
+                                .font(.caption2)
+                                .foregroundStyle(.green)
+                            if manager.autoProgramCount > 0 {
+                                Text("(\(manager.autoProgramCount)x)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
                 .disabled(!manager.isConnected || manager.isBusy)
                 .padding(.vertical, 4)

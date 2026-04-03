@@ -524,6 +524,10 @@ final class DeviceManager {
 
     // MARK: - File Watching (auto-reload on disk change)
 
+    /// When true, automatically programs the chip after file reload
+    var autoProgramOnChange: Bool = false
+    var autoProgramCount: Int = 0
+
     func watchFile(_ url: URL) {
         stopWatchingFile()
         watchedFileURL = url
@@ -547,7 +551,7 @@ final class DeviceManager {
             let newDate = self.fileModDate(url)
             if newDate != self.lastFileModDate {
                 self.lastFileModDate = newDate
-                self.reloadWatchedFile()
+                self.reloadAndMaybeProgram()
             }
         }
 
@@ -567,32 +571,50 @@ final class DeviceManager {
         lastFileModDate = nil
     }
 
-    private func reloadWatchedFile() {
+    private func reloadAndMaybeProgram() {
         guard let url = watchedFileURL else { return }
 
-        // Determine format by extension
+        // Reload the file
         let ext = url.pathExtension.lowercased()
         if ext == "hex" || ext == "ihex" {
             do {
                 let content = try String(contentsOf: url, encoding: .utf8)
                 let data = try IntelHex.parse(content)
+                guard !data.isEmpty else {
+                    log(.warning, "Auto-reload skipped: file is empty")
+                    return
+                }
                 buffer.load(data)
                 log(.info, "Auto-reloaded: \(url.lastPathComponent) (\(formatSize(data.count)))")
             } catch {
                 log(.warning, "Auto-reload failed: \(error.localizedDescription)")
+                return
             }
         } else {
             do {
-                try buffer.loadFromFile(url)
+                let data = try Data(contentsOf: url)
+                guard !data.isEmpty else {
+                    log(.warning, "Auto-reload skipped: file is empty")
+                    return
+                }
+                buffer.load(data)
                 log(.info, "Auto-reloaded: \(url.lastPathComponent) (\(formatSize(buffer.count)))")
             } catch {
                 log(.warning, "Auto-reload failed: \(error.localizedDescription)")
+                return
             }
         }
         statusMessage = "Reloaded \(url.lastPathComponent)"
+
+        // Auto-program if enabled and device is connected
+        if autoProgramOnChange && isConnected && !buffer.isEmpty {
+            autoProgramCount += 1
+            log(.info, "Auto-program #\(autoProgramCount) triggered by file change")
+            writeChip()
+        }
     }
 
-    private func fileModDate(_ url: URL) -> Date? {
+    func fileModDate(_ url: URL) -> Date? {
         try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
     }
 
