@@ -6,7 +6,7 @@ A native macOS tool for programming flash, EEPROM, FRAM, SigmaDSP, and ESP32 dev
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-<img width="1100" height="806" alt="Screenshot 2026-04-03 at 13 01 39" src="https://github.com/user-attachments/assets/54a88edf-8e4e-4d12-90a4-a2ae6d9b0401" />
+<img width="1100" height="865" alt="Screenshot 2026-04-03 at 14 27 18" src="https://github.com/user-attachments/assets/8442d7fd-071a-49ff-a0f2-34b278cecaac" />
 <img width="2200" height="1730" alt="image" src="https://github.com/user-attachments/assets/9b231cd5-6d30-41ba-a242-c6b1cc834e61" />
 <img width="1100" height="806" alt="Screenshot 2026-04-03 at 13 01 53" src="https://github.com/user-attachments/assets/1c3bd186-4efb-415a-b1d6-d1af43e609bf" />
 <img width="1100" height="806" alt="Screenshot 2026-04-03 at 13 02 09" src="https://github.com/user-attachments/assets/6eb7a91d-4d61-48dd-bc1b-5a0761041165" />
