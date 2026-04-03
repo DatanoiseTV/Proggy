@@ -8,12 +8,25 @@ final class ESPViewModel {
     var availablePorts: [(path: String, name: String)] = []
     var selectedPort: String = ""
     var baudRate: Int = 460800
-    var isConnected = false
+    var selectedChip: String = ""  // empty = auto-detect
 
-    // Firmware
+    // Main firmware
     var firmwareData: Data?
     var firmwareFileName: String?
     var flashOffset: String = "10000"
+
+    // Optional images
+    var bootloaderData: Data?
+    var bootloaderFileName: String?
+    var bootloaderOffset: String = "0"
+    var partitionData: Data?
+    var partitionFileName: String?
+    var partitionOffset: String = "8000"
+
+    // Options
+    var eraseBeforeFlash: Bool = true
+    var verifyAfterFlash: Bool = true
+    var resetAfterFlash: Bool = true
 
     // Status
     var isFlashing = false
@@ -24,6 +37,8 @@ final class ESPViewModel {
     // Serial monitor
     var monitorOutput: String = ""
     var monitorInput: String = ""
+    var monitorBaud: Int = 115200
+    var monitorHexMode: Bool = false
     var isMonitoring = false
     private var monitorTask: Task<Void, Never>?
 

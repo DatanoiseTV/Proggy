@@ -154,7 +154,7 @@ struct ChipEntry: Identifiable, Hashable {
     }
 }
 
-// MARK: - Chip Picker Sheet
+// MARK: - Chip Picker Sheet (Finder-style two-column layout)
 
 struct ChipPickerSheet: View {
     @Binding var selectedCategory: ChipCategory
@@ -182,117 +182,185 @@ struct ChipPickerSheet: View {
             .sorted { $0.key < $1.key }
     }
 
-    private var totalForCategory: Int {
-        ChipLibrary.chips.filter { $0.category == selectedCategory }.count
+    private func chipsForCategory(_ cat: ChipCategory) -> Int {
+        ChipLibrary.chips.filter { $0.category == cat }.count
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
+            // Toolbar
+            HStack(spacing: 10) {
+                Image(systemName: "cpu")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
                 Text("Select Device")
-                    .font(.headline)
-                Text("(\(totalForCategory) chips)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+
                 Spacer()
+
+                // Search
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Search all chips...", text: $searchText)
+                        .textFieldStyle(.plain)
+                }
+                .padding(6)
+                .padding(.horizontal, 4)
+                .background(.quaternary.opacity(0.5))
+                .cornerRadius(8)
+                .frame(width: 260)
+
                 Button("Cancel") { onCancel() }
                     .keyboardShortcut(.cancelAction)
             }
-            .padding()
-
-            // Category picker + search
-            HStack(spacing: 12) {
-                Picker("Type", selection: $selectedCategory) {
-                    ForEach(ChipCategory.allCases) { cat in
-                        Label(cat.rawValue, systemImage: cat.icon).tag(cat)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 260)
-
-                TextField("Search \(totalForCategory) chips...", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.bar)
 
             Divider()
 
-            // Chip list
-            List {
-                // Recently used section
-                let recentForCat = recentChips.filter { $0.category == selectedCategory }
-                if !recentForCat.isEmpty && searchText.isEmpty {
-                    Section("Recently Used") {
-                        ForEach(recentForCat.prefix(5)) { chip in
-                            chipRow(chip, isRecent: true)
+            // Two-column Finder layout
+            HSplitView {
+                // Left: Categories sidebar
+                List(selection: $selectedCategory) {
+                    // Recently used
+                    if !recentChips.isEmpty {
+                        Section("Recent") {
+                            ForEach(recentChips.prefix(5)) { chip in
+                                HStack(spacing: 6) {
+                                    Image(systemName: "clock")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Text(chip.name)
+                                        .font(.system(.caption, design: .monospaced))
+                                    Spacer()
+                                    Text(formatSize(chip.capacity))
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
                                 .contentShape(Rectangle())
                                 .onTapGesture { selectChip(chip) }
+                            }
+                        }
+                    }
+
+                    Section("Categories") {
+                        ForEach(ChipCategory.allCases) { cat in
+                            HStack {
+                                Label {
+                                    Text(cat.rawValue)
+                                } icon: {
+                                    Image(systemName: cat.icon)
+                                        .foregroundStyle(categoryColor(cat))
+                                }
+                                Spacer()
+                                Text("\(chipsForCategory(cat))")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(.quaternary)
+                                    .cornerRadius(8)
+                            }
+                            .tag(cat)
                         }
                     }
                 }
+                .listStyle(.sidebar)
+                .frame(minWidth: 180, idealWidth: 200, maxWidth: 240)
 
-                // All chips grouped by manufacturer
-                ForEach(groupedChips, id: \.0) { manufacturer, chips in
-                    Section("\(manufacturer) (\(chips.count))") {
-                        ForEach(chips) { chip in
-                            chipRow(chip, isRecent: false)
-                                .contentShape(Rectangle())
-                                .onTapGesture { selectChip(chip) }
+                // Right: Chip list
+                VStack(spacing: 0) {
+                    // Column header
+                    HStack(spacing: 0) {
+                        Text("Name")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Manufacturer")
+                            .frame(width: 120, alignment: .leading)
+                        Text("Size")
+                            .frame(width: 70, alignment: .trailing)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.bar)
+
+                    Divider()
+
+                    List {
+                        ForEach(groupedChips, id: \.0) { manufacturer, chips in
+                            Section {
+                                ForEach(chips) { chip in
+                                    chipRow(chip)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { selectChip(chip) }
+                                }
+                            } header: {
+                                Text("\(manufacturer) (\(chips.count))")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
                         }
                     }
+                    .listStyle(.inset(alternatesRowBackgrounds: true))
                 }
             }
-            .listStyle(.inset(alternatesRowBackgrounds: true))
         }
-        .frame(width: 600, height: 520)
+        .frame(width: 800, height: 560)
     }
 
     private func selectChip(_ chip: ChipEntry) {
-        // Save to recent
         var recents = (UserDefaults.standard.array(forKey: "recentChips") as? [String]) ?? []
         recents.removeAll { $0 == chip.id }
         recents.insert(chip.id, at: 0)
         if recents.count > 5 { recents = Array(recents.prefix(5)) }
         UserDefaults.standard.set(recents, forKey: "recentChips")
-
         onSelect(chip)
     }
 
     @ViewBuilder
-    private func chipRow(_ chip: ChipEntry, isRecent: Bool) -> some View {
-        HStack(spacing: 8) {
-            if isRecent {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
+    private func chipRow(_ chip: ChipEntry) -> some View {
+        HStack(spacing: 0) {
             Text(chip.name)
                 .font(.system(.body, design: .monospaced))
                 .fontWeight(.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(chip.manufacturer)
                 .font(.caption)
-                .foregroundStyle(.tertiary)
-
-            Spacer()
-
-            Text(formatSize(chip.capacity))
-                .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
 
-            if let addr = chip.i2cAddress {
-                Text(String(format: "0x%02X", addr))
-                    .font(.system(.caption2, design: .monospaced))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(.cyan.opacity(0.15))
-                    .cornerRadius(3)
+            HStack(spacing: 4) {
+                Text(formatSize(chip.capacity))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+
+                if let addr = chip.i2cAddress {
+                    Text(String(format: "0x%02X", addr))
+                        .font(.system(.caption2, design: .monospaced))
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(.cyan.opacity(0.15))
+                        .cornerRadius(3)
+                }
             }
+            .frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 1)
+    }
+
+    private func categoryColor(_ cat: ChipCategory) -> Color {
+        switch cat {
+        case .spiFlash: return .orange
+        case .spiEEPROM: return .blue
+        case .spiFRAM: return .purple
+        case .i2cEEPROM: return .cyan
+        case .i2cFRAM: return .green
+        }
     }
 
     private func formatSize(_ bytes: Int) -> String {
