@@ -6,6 +6,7 @@ enum NavigationTab: String, CaseIterable, Identifiable {
     case spi = "SPI Terminal"
     case i2c = "I2C Terminal"
     case dsp = "SigmaDSP"
+    case esp = "ESP Flasher"
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum NavigationTab: String, CaseIterable, Identifiable {
         case .spi: return "arrow.left.arrow.right"
         case .i2c: return "point.3.connected.trianglepath.dotted"
         case .dsp: return "waveform.path"
+        case .esp: return "bolt.horizontal"
         }
     }
 }
@@ -47,6 +49,8 @@ struct ContentView: View {
                         I2CView()
                     case .dsp:
                         DSPView()
+                    case .esp:
+                        ESPView()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -103,7 +107,7 @@ struct SidebarView: View {
     private var zifHighlight: ZIFSocketView.ZIFHighlight {
         switch selectedTab {
         case .i2c, .dsp: return .i2c
-        case .spi, .flash: return .spi
+        case .spi, .flash, .esp: return .spi
         }
     }
 
