@@ -1,6 +1,6 @@
 # Proggy
 
-A native macOS tool for programming flash, EEPROM, FRAM, SigmaDSP, and ESP32 devices. Built for embedded engineers who need a fast, no-nonsense programmer that just works.
+A native macOS tool for programming flash, EEPROM, FRAM, SigmaDSP, ESP32, and RP2040/RP2350 devices. Built for embedded engineers who need a fast, no-nonsense programmer that just works.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
@@ -14,8 +14,9 @@ A native macOS tool for programming flash, EEPROM, FRAM, SigmaDSP, and ESP32 dev
 ## What it does
 
 - **Flash / EEPROM / FRAM** programming via CH341A (SPI + I2C)
-- **ESP32 flashing** via any USB-UART adapter (serial port)
-- **ADAU14xx SigmaDSP** firmware upload, safeload, and diagnostics via SPI
+- **ESP32 flashing** via any USB-UART adapter (serial port) with serial monitor
+- **RP2040/RP2350 flashing** via Raspberry Pi Debug Probe (CMSIS-DAP/SWD)
+- **ADAU14xx SigmaDSP** firmware upload, safeload, biquad EQ, and diagnostics via SPI
 - **SPI & I2C terminals** for raw bus communication
 - **550+ supported devices** with auto-detection
 
@@ -42,11 +43,19 @@ A native macOS tool for programming flash, EEPROM, FRAM, SigmaDSP, and ESP32 dev
 
 ### ESP32 Flasher (Serial Port)
 - Supports **ESP32, ESP32-S2/S3, ESP32-C2/C3/C5/C6/C61, ESP32-H2, ESP32-P4**
-- SLIP-framed ROM bootloader protocol
-- Auto chip detection via magic register
-- Configurable flash offset and baud rate (115.2k to 2M)
+- Multi-image: firmware + optional bootloader + partition table, each with offset
+- SLIP-framed ROM bootloader protocol with auto chip detection
+- Configurable baud rate (115.2k to 2M), erase/verify/reset options
 - DTR/RTS reset-to-bootloader sequence
-- Built-in serial monitor (send/receive)
+- Built-in serial monitor with baud rate picker and hex mode
+
+### SWD / Pico (Debug Probe)
+- **RP2040 and RP2350** flash programming via SWD
+- CMSIS-DAP v2 protocol over USB (Raspberry Pi Debug Probe / Picoprobe)
+- Auto-detect probe, read target IDCODE
+- Halt/resume/reset ARM Cortex-M0+/M33 core
+- Firmware loading: `.bin`, `.uf2`, `.elf`
+- Pinout reference for debug probe wiring
 
 ### SigmaDSP (ADAU14xx) via SPI
 - Firmware upload from SigmaStudio `.dat` or `.bin` with full init sequence
@@ -132,6 +141,7 @@ Sources/
       CH341AutoDetect.swift # Multi-method chip detection
       CH341DSP.swift        # ADAU14xx SigmaDSP over SPI
       ESPProtocol.swift     # ESP32 SLIP bootloader protocol
+      SWDProtocol.swift     # CMSIS-DAP/SWD for RP2040/RP2350
       SerialPort.swift      # macOS serial port (IOKit + termios)
     Models/
       ChipDatabase.swift    # JEDEC ID lookup
@@ -147,6 +157,7 @@ Sources/
 - `brew install libusb`
 - CH341A programmer (for flash/EEPROM/FRAM/DSP)
 - Any USB-UART adapter (for ESP32 flashing)
+- Raspberry Pi Debug Probe or Picoprobe (for RP2040/RP2350 via SWD)
 
 ## License
 
