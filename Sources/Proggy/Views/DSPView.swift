@@ -15,6 +15,8 @@ struct DSPView: View {
                     controlSection
                     registerSection
                     safeloadSection
+                    biquadSection
+                    levelMeterSection
                 }
                 .padding(16)
             }
@@ -244,7 +246,7 @@ struct DSPView: View {
                 }
 
                 HStack(spacing: 6) {
-                    TextField("1.0", text: $vm.safeloadValue)
+                    TextField("1.0, 0.5, ...", text: $vm.safeloadValue)
                         .font(.system(.caption, design: .monospaced))
                         .textFieldStyle(.roundedBorder)
                     Button("Send") {
@@ -252,6 +254,109 @@ struct DSPView: View {
                     }
                     .controlSize(.small)
                     .tint(.green)
+                }
+
+                Text("Up to 5 values (comma/space separated). 28-byte atomic burst at frame boundary.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .disabled(!manager.isConnected)
+            .padding(.vertical, 4)
+        }
+    }
+
+    // MARK: - Biquad
+
+    @ViewBuilder
+    private var biquadSection: some View {
+        GroupBox("Biquad (EQ Cookbook)") {
+            VStack(alignment: .leading, spacing: 6) {
+                LabeledContent("Base addr") {
+                    TextField("0000", text: $vm.biquadAddr)
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 70)
+                }
+
+                // Coefficient fields in 2 rows
+                HStack(spacing: 4) {
+                    coeffField("b0", $vm.biquadB0)
+                    coeffField("b1", $vm.biquadB1)
+                    coeffField("b2", $vm.biquadB2)
+                }
+                HStack(spacing: 4) {
+                    coeffField("a1", $vm.biquadA1)
+                    coeffField("a2", $vm.biquadA2)
+                    Spacer()
+                }
+
+                HStack(spacing: 6) {
+                    Button("Write") {
+                        vm.writeBiquad(device: manager.device, manager: manager)
+                    }
+                    .controlSize(.small)
+                    .tint(.orange)
+
+                    Button("Read") {
+                        vm.readBiquad(device: manager.device, manager: manager)
+                    }
+                    .controlSize(.small)
+                }
+
+                Text("Writes B2,B1,B0,A2,A1 via safeload. a1/a2 auto-negated for ADAU convention. Unstable filters forced to unity.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .disabled(!manager.isConnected)
+            .padding(.vertical, 4)
+        }
+    }
+
+    @ViewBuilder
+    private func coeffField(_ label: String, _ value: Binding<String>) -> some View {
+        VStack(spacing: 1) {
+            Text(label)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+            TextField("0.0", text: value)
+                .font(.system(.caption, design: .monospaced))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 72)
+        }
+    }
+
+    // MARK: - Level Meters
+
+    @ViewBuilder
+    private var levelMeterSection: some View {
+        GroupBox("Level Meters") {
+            VStack(alignment: .leading, spacing: 6) {
+                LabeledContent("Addresses") {
+                    TextField("addr1, addr2...", text: $vm.levelAddrs)
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 140)
+                }
+
+                Button("Read Levels") {
+                    vm.readLevels(device: manager.device, manager: manager)
+                }
+                .controlSize(.small)
+
+                if !vm.levelValues.isEmpty {
+                    ForEach(Array(vm.levelValues.enumerated()), id: \.offset) { i, val in
+                        HStack(spacing: 6) {
+                            Text("[\(i)]")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            ProgressView(value: min(max(Double(val), 0), 1))
+                                .tint(val > 0.9 ? .red : val > 0.7 ? .orange : .green)
+                            Text(String(format: "%.1f dB", val > 0 ? 20 * log10(val) : -144))
+                                .font(.system(.caption2, design: .monospaced))
+                                .frame(width: 56, alignment: .trailing)
+                        }
+                    }
                 }
             }
             .disabled(!manager.isConnected)

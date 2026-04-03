@@ -200,29 +200,115 @@ final class DSPViewModel {
         }
     }
 
-    // MARK: - Safeload
+    // MARK: - Safeload (1–5 params, 28-byte atomic burst)
 
     func performSafeload(device: CH341Device, manager: DeviceManager) {
         guard let targetAddr = UInt16(safeloadAddr, radix: 16) else { return }
 
-        let value: UInt32
-        switch safeloadFormat {
-        case .float: value = DSPFixedPoint.fromFloat(Float(safeloadValue) ?? 0)
-        case .dB: value = DSPFixedPoint.fromDecibels(Float(safeloadValue) ?? -144)
-        case .hex: value = UInt32(safeloadValue.replacingOccurrences(of: "0x", with: ""), radix: 16) ?? 0
+        // Parse up to 5 values separated by commas or spaces
+        let tokens = safeloadValue
+            .replacingOccurrences(of: ",", with: " ")
+            .split(separator: " ")
+            .filter { !$0.isEmpty }
+
+        let values: [UInt32] = tokens.prefix(5).map { token in
+            let s = String(token)
+            switch safeloadFormat {
+            case .float: return DSPFixedPoint.fromFloat(Float(s) ?? 0)
+            case .dB: return DSPFixedPoint.fromDecibels(Float(s) ?? -144)
+            case .hex: return UInt32(s.replacingOccurrences(of: "0x", with: ""), radix: 16) ?? 0
+            }
         }
+        guard !values.isEmpty else { return }
 
         Task {
             do {
                 try await device.perform { dev in
-                    try dev.dspSafeload(targetAddr: targetAddr, values: [value])
+                    try dev.dspSafeload(targetAddr: targetAddr, values: values)
                 }
-                let flt = DSPFixedPoint.toFloat(value)
-                let db = DSPFixedPoint.toDecibels(value)
-                manager.log(.info, String(format: "Safeload [0x%04X] = 0x%08X (%.6f / %.1f dB)",
-                                          targetAddr, value, flt, db))
+                let desc = values.enumerated().map { (i, v) in
+                    String(format: "[0x%04X]=0x%08X(%.4f)", targetAddr + UInt16(i), v, DSPFixedPoint.toFloat(v))
+                }.joined(separator: " ")
+                manager.log(.info, "Safeload \(values.count) param(s): \(desc)")
             } catch {
                 manager.log(.error, "Safeload failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Biquad
+
+    var biquadAddr: String = ""
+    var biquadB0: String = "1.0"
+    var biquadB1: String = "0.0"
+    var biquadB2: String = "0.0"
+    var biquadA1: String = "0.0"
+    var biquadA2: String = "0.0"
+
+    func writeBiquad(device: CH341Device, manager: DeviceManager) {
+        guard let addr = UInt16(biquadAddr, radix: 16) else { return }
+        let coeffs = CH341Device.BiquadCoeffs(
+            b0: Float(biquadB0) ?? 1, b1: Float(biquadB1) ?? 0, b2: Float(biquadB2) ?? 0,
+            a1: Float(biquadA1) ?? 0, a2: Float(biquadA2) ?? 0
+        )
+
+        Task {
+            do {
+                let stable = try await device.perform { dev in
+                    try dev.dspWriteBiquad(baseAddr: addr, coeffs: coeffs)
+                }
+                if stable {
+                    manager.log(.info, String(format: "Biquad [0x%04X]: b0=%.4f b1=%.4f b2=%.4f a1=%.4f a2=%.4f",
+                                              addr, coeffs.b0, coeffs.b1, coeffs.b2, coeffs.a1, coeffs.a2))
+                } else {
+                    manager.log(.warning, "Biquad UNSTABLE — forced to unity passthrough")
+                }
+            } catch {
+                manager.log(.error, "Biquad write failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func readBiquad(device: CH341Device, manager: DeviceManager) {
+        guard let addr = UInt16(biquadAddr, radix: 16) else { return }
+        Task {
+            do {
+                let c = try await device.perform { dev in try dev.dspReadBiquad(baseAddr: addr) }
+                biquadB0 = String(format: "%.6f", c.b0)
+                biquadB1 = String(format: "%.6f", c.b1)
+                biquadB2 = String(format: "%.6f", c.b2)
+                biquadA1 = String(format: "%.6f", c.a1)
+                biquadA2 = String(format: "%.6f", c.a2)
+                manager.log(.info, String(format: "Biquad [0x%04X]: b0=%.6f b1=%.6f b2=%.6f a1=%.6f a2=%.6f %s",
+                                          addr, c.b0, c.b1, c.b2, c.a1, c.a2, c.isStable ? "STABLE" : "UNSTABLE"))
+            } catch {
+                manager.log(.error, "Biquad read failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Level Meters
+
+    var levelAddrs: String = ""  // Comma-separated hex addresses
+    var levelValues: [Float] = []
+
+    func readLevels(device: CH341Device, manager: DeviceManager) {
+        let addrs = levelAddrs
+            .replacingOccurrences(of: ",", with: " ")
+            .split(separator: " ")
+            .compactMap { UInt16(String($0).replacingOccurrences(of: "0x", with: ""), radix: 16) }
+        guard !addrs.isEmpty else { return }
+
+        Task {
+            do {
+                let vals = try await device.perform { dev in try dev.dspReadLevels(addrs: addrs) }
+                levelValues = vals
+                let desc = zip(addrs, vals).map { (a, v) in
+                    String(format: "0x%04X=%.4f(%.1fdB)", a, v, v > 0 ? 20*log10(v) : -144)
+                }.joined(separator: " ")
+                manager.log(.info, "Levels: \(desc)")
+            } catch {
+                manager.log(.error, "Level read failed: \(error.localizedDescription)")
             }
         }
     }

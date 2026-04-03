@@ -65,6 +65,31 @@ struct ADAU14xx {
         }
     }
 
+    // Additional registers
+    static let PLL_WATCHDOG_REG: UInt16 = 0xF006
+    static let CLK_GEN1_M: UInt16     = 0xF020
+    static let CLK_GEN1_N: UInt16     = 0xF021
+    static let SERIAL_BYTE_0_BASE: UInt16 = 0xF200
+    static let SOUT_SOURCE_BASE: UInt16   = 0xF180
+    static let ASRC_INPUT_BASE: UInt16    = 0xF100
+    static let ASRC_OUT_RATE_BASE: UInt16 = 0xF140
+    static let ASRC_MUTE: UInt16          = 0xF581
+    static let ASRC_RATIO_BASE: UInt16    = 0xF582
+    static let MP_MODE_BASE: UInt16       = 0xF510
+    static let MP_WRITE_BASE: UInt16      = 0xF520
+    static let MP_READ_BASE: UInt16       = 0xF530
+    static let AUX_ADC_BASE: UInt16       = 0xF5A0
+    static let WATCHDOG_MAXCOUNT: UInt16  = 0xF443
+    static let WATCHDOG_PRESCALE: UInt16  = 0xF444
+    static let START_ADDRESS: UInt16      = 0xF404
+    static let PANIC_PARITY_MASK: UInt16  = 0xF422
+    static let PANIC_WD_MASK: UInt16      = 0xF424
+
+    // Safeload timing: minimum delay between consecutive safeloads
+    static func safeloadIntervalUs(sampleRate: Int = 48000) -> Int {
+        2_000_000 / sampleRate  // 2 frames, e.g. 41 us @ 48 kHz
+    }
+
     /// Bytes per word for a given address region
     static func bytesPerWord(address: UInt16) -> Int {
         if address >= CONTROL_REG_START { return 2 }
@@ -218,31 +243,142 @@ extension CH341Device {
         return try dspReadReg(ADAU14xx.ASRC_LOCK)
     }
 
-    // MARK: - Safeload (via SPI burst write)
+    // MARK: - Safeload (28-byte burst write for atomic frame-boundary update)
 
-    /// Perform a safeload write of up to 5 parameters atomically.
-    /// Writes all 7 registers (data0-4, addr, trigger) as individual SPI transactions.
+    /// Perform a safeload write of 1–5 parameters atomically.
+    /// Packs all 7 registers (data0-4, target addr, trigger) into a single SPI burst
+    /// of 28 bytes so the DSP applies them at the next audio frame boundary.
     func dspSafeload(targetAddr: UInt16, values: [UInt32]) throws {
         guard values.count >= 1 && values.count <= 5 else { return }
 
-        // Write data slots (0x6000-0x6004)
+        // Build 28-byte payload: 5 data slots (20B) + target addr (4B) + trigger (4B)
+        var burst = [UInt8](repeating: 0, count: 28)
+
+        // Data slots 0-4 (offsets 0-19)
         for (i, val) in values.enumerated() {
-            let reg = ADAU14xx.SAFELOAD_DATA0 + UInt16(i)
-            try dspSPIWrite(reg: reg, data: [
-                UInt8((val >> 24) & 0xFF), UInt8((val >> 16) & 0xFF),
-                UInt8((val >> 8) & 0xFF), UInt8(val & 0xFF)
-            ])
+            let off = i * 4
+            burst[off + 0] = UInt8((val >> 24) & 0xFF)
+            burst[off + 1] = UInt8((val >> 16) & 0xFF)
+            burst[off + 2] = UInt8((val >> 8) & 0xFF)
+            burst[off + 3] = UInt8(val & 0xFF)
         }
 
-        // Write target address (0x6005)
-        let addrVal = UInt32(targetAddr)
-        try dspSPIWrite(reg: ADAU14xx.SAFELOAD_ADDR, data: [
-            UInt8((addrVal >> 24) & 0xFF), UInt8((addrVal >> 16) & 0xFF),
-            UInt8((addrVal >> 8) & 0xFF), UInt8(addrVal & 0xFF)
-        ])
+        // Target address at offset 20 (register 0x6005)
+        let addr32 = UInt32(targetAddr)
+        burst[20] = UInt8((addr32 >> 24) & 0xFF)
+        burst[21] = UInt8((addr32 >> 16) & 0xFF)
+        burst[22] = UInt8((addr32 >> 8) & 0xFF)
+        burst[23] = UInt8(addr32 & 0xFF)
 
-        // Trigger (0x6006) — write word count
-        try dspSPIWrite(reg: ADAU14xx.SAFELOAD_TRIGGER, data: [0, 0, 0, UInt8(values.count)])
+        // Trigger at offset 24 (register 0x6006) — word count
+        burst[27] = UInt8(values.count)
+
+        // Single SPI burst write starting at 0x6000
+        try dspSPIWrite(reg: ADAU14xx.SAFELOAD_DATA0, data: burst)
+    }
+
+    // MARK: - Biquad Coefficients
+
+    /// Biquad coefficients in Audio EQ Cookbook convention (b0, b1, b2, a1, a2)
+    struct BiquadCoeffs {
+        var b0: Float, b1: Float, b2: Float, a1: Float, a2: Float
+
+        static let unity = BiquadCoeffs(b0: 1, b1: 0, b2: 0, a1: 0, a2: 0)
+
+        /// Check Schur stability: |a2| < 1 AND |a1| < 1 + a2
+        var isStable: Bool {
+            abs(a2) < 1.0 && abs(a1) < 1.0 + a2
+        }
+    }
+
+    /// Write biquad coefficients to DSP via safeload.
+    /// ADAU14xx stores in order: B2, B1, B0, A2, A1 at 5 consecutive addresses.
+    /// ADAU convention negates a1/a2 compared to standard EQ Cookbook.
+    /// Returns true if coefficients were stable; forces unity if unstable.
+    @discardableResult
+    func dspWriteBiquad(baseAddr: UInt16, coeffs: BiquadCoeffs) throws -> Bool {
+        let c: BiquadCoeffs
+        if coeffs.isStable {
+            c = coeffs
+        } else {
+            c = .unity
+        }
+
+        // ADAU order: B2, B1, B0, A2, A1 — with a1/a2 negated
+        let values: [UInt32] = [
+            DSPFixedPoint.fromFloat(c.b2),
+            DSPFixedPoint.fromFloat(c.b1),
+            DSPFixedPoint.fromFloat(c.b0),
+            DSPFixedPoint.fromFloat(-c.a2),  // Negate for ADAU convention
+            DSPFixedPoint.fromFloat(-c.a1),  // Negate for ADAU convention
+        ]
+
+        try dspSafeload(targetAddr: baseAddr, values: values)
+        return coeffs.isStable
+    }
+
+    /// Read biquad coefficients from DSP. Returns in standard EQ Cookbook convention.
+    func dspReadBiquad(baseAddr: UInt16) throws -> BiquadCoeffs {
+        // Read 5 consecutive 32-bit values: B2, B1, B0, A2, A1
+        let b2 = DSPFixedPoint.toFloat(try dspReadParam(baseAddr))
+        let b1 = DSPFixedPoint.toFloat(try dspReadParam(baseAddr + 1))
+        let b0 = DSPFixedPoint.toFloat(try dspReadParam(baseAddr + 2))
+        let a2_neg = DSPFixedPoint.toFloat(try dspReadParam(baseAddr + 3))
+        let a1_neg = DSPFixedPoint.toFloat(try dspReadParam(baseAddr + 4))
+
+        // Un-negate for standard convention
+        return BiquadCoeffs(b0: b0, b1: b1, b2: b2, a1: -a1_neg, a2: -a2_neg)
+    }
+
+    // MARK: - Level Meters
+
+    /// Read a single level meter value as linear float (0.0–1.0+)
+    func dspReadLevel(addr: UInt16) throws -> Float {
+        let raw = try dspReadParam(addr)
+        return DSPFixedPoint.toFloat(raw)
+    }
+
+    /// Read multiple level meters
+    func dspReadLevels(addrs: [UInt16]) throws -> [Float] {
+        try addrs.map { try dspReadLevel(addr: $0) }
+    }
+
+    // MARK: - Multipurpose Pins (GPIO)
+
+    func dspMPWrite(pin: Int, value: Bool) throws {
+        guard pin >= 0 && pin <= 13 else { return }
+        try dspWriteReg(ADAU14xx.MP_WRITE_BASE + UInt16(pin), value: value ? 1 : 0)
+    }
+
+    func dspMPRead(pin: Int) throws -> Bool {
+        guard pin >= 0 && pin <= 13 else { return false }
+        return try dspReadReg(ADAU14xx.MP_READ_BASE + UInt16(pin)) != 0
+    }
+
+    // MARK: - Aux ADC
+
+    /// Read auxiliary ADC channel (0-5). Returns 0–1023.
+    func dspAuxADCRead(channel: Int) throws -> UInt16 {
+        guard channel >= 0 && channel <= 5 else { return 0 }
+        let raw = try dspReadReg(ADAU14xx.AUX_ADC_BASE + UInt16(channel))
+        return raw & 0x03FF
+    }
+
+    // MARK: - Config Readback
+
+    /// Read serial port configuration (TDM mode, data format, word length)
+    func dspReadSerialConfig(port: Int) throws -> (ctrl0: UInt16, ctrl1: UInt16) {
+        let base = ADAU14xx.SERIAL_BYTE_0_BASE + UInt16(port * 4)
+        let ctrl0 = try dspReadReg(base)
+        let ctrl1 = try dspReadReg(base + 1)
+        return (ctrl0, ctrl1)
+    }
+
+    /// Read power enable registers
+    func dspReadPower() throws -> (enable0: UInt16, enable1: UInt16) {
+        let e0 = try dspReadReg(ADAU14xx.POWER_ENABLE0)
+        let e1 = try dspReadReg(ADAU14xx.POWER_ENABLE1)
+        return (e0, e1)
     }
 
     // MARK: - Firmware Upload (via SPI)
